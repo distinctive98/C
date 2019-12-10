@@ -57,7 +57,7 @@ int _cust_id;
 		int	order_rct_emp_id;
 	};
 
-	/* No Data Found(1403)를 확인하기 위함 */
+	/* 구조체 배열 선언  */
 	struct order_t ord[ORD_MAX];
 
 	int	i=0;
