@@ -1,0 +1,144 @@
+#include <stdio.h>
+
+EXEC SQL INCLUDE sqlca;
+EXEC SQL INCLUDE oraca;
+EXEC ORACLE OPTION (ORACA=YES);
+
+char	*ora_userid = "bo";
+char	*ora_passwd = "bo";
+
+char	sqlstmt[512];
+
+int
+db_connect()
+{
+	EXEC SQL CONNECT :ora_userid IDENTIFIED BY :ora_passwd;
+	if (sqlca.sqlcode != 0) {
+		fprintf(stdout, "CONNECT ERROR : %.*s\n",
+			sqlca.sqlerrm.sqlerrml, sqlca.sqlerrm.sqlerrmc);
+
+		exit(0);
+	}
+	
+	fprintf(stdout, "DATABASE와 연결이 되었습니다.\n");
+
+	return (0);
+}
+
+int
+db_disconnect()
+{
+	EXEC SQL ROLLBACK WORK RELEASE;
+	fprintf(stdout,"DATABASE와의 연결을 해제했습니다. \n");
+	exit (0);
+}
+
+int q1(_cust_id)
+int _cust_id;
+{
+	/* customers 테이블 변수 */
+	int	c_cust_id;
+	char	cust_name[40+1];
+	char	cust_gender_type[1+1];
+	char	login_id[10+1];
+	char	login_pswd[40+1];
+	char	login_name[40+1];
+	char	cust_grade[1+1];
+
+	/* orders 테이블 변수 */
+	int	order_id[1000];
+	int 	o_cust_id[1000];
+	char	order_dt[1000][8+1];
+	char	order_channel_type[1000][1+1];
+	char	order_status[1000][1+1];
+	int	order_rct_emp_id[1000];
+	
+	int	i=1;
+
+	/* cust_id에 해당하는 하나의row 추출 */
+	EXEC SQL
+	SELECT	CUST_ID,
+		CUST_NAME,
+		CUST_GENDER_TYPE,
+		LOGIN_ID,
+		LOGIN_PSWD,
+		LOGIN_NAME,
+		CUST_GRADE
+	INTO	:c_cust_id,
+		:cust_name,
+		:cust_gender_type,
+		:login_id,
+		:login_pswd,
+		:login_name,
+		:cust_grade
+	FROM	CUSTOMERS
+	WHERE	CUST_ID = :_cust_id;
+
+	if(sqlca.sqlcode != 0)
+	{
+		if(sqlca.sqlcode == 1403)
+		{
+			printf("%d 고객 데이터가 존재하지 않습니다.\n", _cust_id);
+		}
+		else
+			printf("OPEN ERR : %d\n", sqlca.sqlcode);
+		
+		return (-1);
+	}
+	else
+	{	
+		printf("%d %s %s %s %s %s %s\n",
+			c_cust_id, cust_name, cust_gender_type, login_id, login_pswd, login_name, cust_grade);	
+	}
+
+	/* cust_id에 해당하는 행 ORDERS 테이블에서 추출 */
+	EXEC SQL DECLARE C02 CURSOR FOR
+	SELECT	ORDER_ID,
+		CUST_ID,
+		TO_CHAR(ORDER_DT, 'YYYYMMDD'),
+		ORDER_CHANNEL_TYPE,
+		ORDER_STATUS,
+		NVL(ORDER_RCT_EMP_ID, -1)
+	FROM	ORDERS
+	WHERE	CUST_ID= :_cust_id;
+
+	EXEC SQL OPEN C02;
+
+	memset(order_dt, 0x00, sizeof(order_dt));
+	memset(order_channel_type, 0x00, sizeof(order_channel_type));
+	memset(order_status, 0x00, sizeof(order_status));
+
+	EXEC SQL FETCH C02
+		INTO 	:order_id,
+			:o_cust_id,
+			:order_dt,
+			:order_channel_type,
+			:order_status,
+			:order_rct_emp_id;
+
+	for(i=0; i<sqlca.sqlerrd[2]; i++)
+	{	
+		printf("%d %d %s %s %s %d\n",
+			order_id[i], o_cust_id[i], order_dt[i], order_channel_type[i], order_status[i], order_rct_emp_id[i]);
+	}
+
+	EXEC SQL CLOSE C02;
+	return (0);
+}
+
+void
+Usage()
+{
+	printf("Usage : t4 cust_id\n");
+	exit(0);
+}
+
+main(argc, argv)
+int	argc;
+char	*argv[];
+{
+if(argc != 2) Usage();
+db_connect();
+q1(atoi(argv[1]));
+db_disconnect();
+}
