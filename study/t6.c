@@ -25,9 +25,19 @@ int fil(int l, int m, char* S, int f)
 
 	return(0);			
 }
+ void Usage()
+{
+	printf("Usage: t6 size\n");
+}
 
 int main(int argc, char** argv)
 {
+	if(argc < 2)
+	{
+		Usage();
+ 		return (0);
+	}
+
 	int l;	//line No
 	int m;	//배열 크기
 	char S[100][100+1];
@@ -36,7 +46,12 @@ int main(int argc, char** argv)
 	
 	/* 배열 크기 초기화 */
 	m = atoi(argv[1]);
-	
+	if(m > 100)
+    	{
+	      	printf("err: 크기는 100을 넘을 수 없습니다.");
+		return (0);
+	}
+
 	/* 정방향 */
 	for(i=0; i<m; i++)
 	{
