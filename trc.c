@@ -1,16 +1,4 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<string.h>
-
-struct comm_hd_t {
-	unsigned short len;
-	int tr;
-	int rslt;
-	int cust_id;
-	char data[1];
-};
-
-#define SZ_COMM_HD (sizeof(struct comm_hd_t)-1)
+#include	"tr.h"
 
 void Usage()
 {

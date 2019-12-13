@@ -1,15 +1,4 @@
-#include<stdio.h>
-#include<stdlib.h>
-
-struct comm_hd_t {
-	unsigned short len;
-	int tr;
-	int rslt;
-	int cust_id;
-	char data[1];
-};
-
-#define SZ_COMM_HD (sizeof(struct comm_hd_t)-1)
+#include	"tr.h"	/* 유저가 정의한 헤더임을 의미 */
 
 void Usage()
 {
