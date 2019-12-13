@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include	"tr.h"
 
 #define ORD_MAX 7
 
@@ -6,21 +6,10 @@ EXEC SQL INCLUDE sqlca;
 EXEC SQL INCLUDE oraca;
 EXEC ORACLE OPTION (ORACA=YES);
 
-char	sqlstmt[512];
-
-int tr2(_cust_id)
-int _cust_id;
+int tr2(hd, buf)
+struct comm_hd_t *hd;
+char *buf;
 {
-
-	/* orders 테이블에 대한 구조체(무조건 select 순서와 같아야 함) */
-	struct order_t {
-		int		order_id;
-		int 	o_cust_id;
-		char	order_dt[8+1];
-		char	order_channel_type[1+1];
-		char	order_status[1+1];
-		int		order_rct_emp_id;
-	};
 
 	/* 구조체 배열 선언  */
 	struct order_t ord[ORD_MAX];
@@ -31,13 +20,13 @@ int _cust_id;
 	/* cust_id에 해당하는 행 ORDERS 테이블에서 추출 */
 	EXEC SQL DECLARE C02 CURSOR FOR
 	SELECT	ORDER_ID,
-		CUST_ID,
-		TO_CHAR(ORDER_DT, 'YYYYMMDD'),
-		ORDER_CHANNEL_TYPE,
-		ORDER_STATUS,
-		NVL(ORDER_RCT_EMP_ID, -1)
+			CUST_ID,
+			TO_CHAR(ORDER_DT, 'YYYYMMDD'),
+			ORDER_CHANNEL_TYPE,
+			ORDER_STATUS,
+			NVL(ORDER_RCT_EMP_ID, -1)
 	FROM	ORDERS
-	WHERE	CUST_ID= :_cust_id;
+	WHERE	CUST_ID= :hd->cust_id;
 	
 	/* 커서 오픈 */
 	EXEC SQL OPEN C02;
@@ -55,9 +44,10 @@ int _cust_id;
 		/* sqlca.sqlerrd[2]에는 FETCH건수가 저장되어 있음  */
 		/* sqlca.sqlerrd[2]는 중첩문에 의해 구조체 크기의 배수로 증가됨 */
 		for(i=0; i<sqlca.sqlerrd[2]-(ORD_MAX*j); i++)
-		{	
-			printf("%d %d %s %s %s %d\n",
-				ord[i].order_id, ord[i].o_cust_id, ord[i].order_dt, ord[i].order_channel_type, 
+		{
+			/* 데이터를 채운 길이만큼 이동해서 버퍼를 채워준다 */	
+			sprintf(buf+strlen(buf), "%d %d %s %s %s %d\n",
+				ord[i].order_id, ord[i].cust_id, ord[i].order_dt, ord[i].order_channel_type, 
 				ord[i].order_status, ord[i].order_rct_emp_id);
 
 		}
@@ -68,9 +58,9 @@ int _cust_id;
 		j++;
 	}
 
-	printf("%d건이 검색되었습니다.\n", sqlca.sqlerrd[2]);
+	sprintf(buf+strlen(buf), "%d건이 검색되었습니다.\n", sqlca.sqlerrd[2]);
 
 	EXEC SQL CLOSE C02;
-	return (0);
+	return (strlen(buf));
 }
 

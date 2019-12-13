@@ -14,6 +14,9 @@ int main(int argc, char** argv)
 	int sfd;
 	/* 구조체 변수  */	
 	struct comm_hd_t hd;
+	
+	char buf[100000];
+	int rval;
 
 	if(argc < 2)
 	{
@@ -43,8 +46,15 @@ int main(int argc, char** argv)
 		printf("고객번호를 입력하세요: ");
 		scanf("%d",&hd.cust_id);
 		printf("tr: %d, cust_id: %d\n", hd.tr, hd.cust_id);
+
 		tcp_select_send(sfd, &hd, sizeof(hd));
+	
+		memset(buf, 0x00, sizeof(buf));
+		/* 수신받을 때는 max size로 받음 */
+		rval = tcp_select_recv(sfd, buf, sizeof(buf));
 		
+		printf("rval: %d, buf: %s", rval, buf);
+
 		if(hd.tr == 9)
 		{
 			break;

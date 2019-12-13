@@ -4,6 +4,8 @@
 #include	<stdio.h>
 #include	<string.h>
 #include	<stdlib.h>
+#include	<signal.h>
+#include	<unistd.h>
 
 struct comm_hd_t {
     unsigned short len;
@@ -17,7 +19,7 @@ struct comm_hd_t {
 
 struct order_t {
         int     order_id;
-        int     o_cust_id;
+        int     cust_id;
         char    order_dt[8+1];
         char    order_channel_type[1+1];
         char    order_status[1+1];

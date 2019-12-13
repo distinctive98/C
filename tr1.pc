@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include "tr.h"
 
 EXEC SQL INCLUDE sqlca;
 EXEC SQL INCLUDE oraca;
@@ -6,8 +6,6 @@ EXEC ORACLE OPTION (ORACA=YES);
 
 char	*ora_userid = "bo";
 char	*ora_passwd = "bo";
-
-char	sqlstmt[512];
 
 int
 db_connect()
@@ -33,11 +31,12 @@ db_disconnect()
 	exit (0);
 }
 
-int tr1(_cust_id)
-int _cust_id;
+int tr1(hd, buf)
+struct comm_hd_t *hd;
+char *buf;
 {
 	/* customers 테이블 변수 */
-	int	c_cust_id;
+	int		cust_id;
 	char	cust_name[40+1];
 	char	cust_gender_type[1+1];
 	char	login_id[10+1];
@@ -48,40 +47,40 @@ int _cust_id;
 	/* cust_id에 해당하는 하나의row 추출 */
 	EXEC SQL
 	SELECT	CUST_ID,
-		CUST_NAME,
-		CUST_GENDER_TYPE,
-		LOGIN_ID,
-		LOGIN_PSWD,
-		LOGIN_NAME,
-		CUST_GRADE
-	INTO	:c_cust_id,
-		:cust_name,
-		:cust_gender_type,
-		:login_id,
-		:login_pswd,
-		:login_name,
-		:cust_grade
+			CUST_NAME,
+			CUST_GENDER_TYPE,
+			LOGIN_ID,
+			LOGIN_PSWD,
+			LOGIN_NAME,
+			CUST_GRADE
+	INTO	:cust_id,
+			:cust_name,
+			:cust_gender_type,
+			:login_id,
+			:login_pswd,
+			:login_name,
+			:cust_grade
 	FROM	CUSTOMERS
-	WHERE	CUST_ID = :_cust_id;
+	WHERE	CUST_ID = :hd->cust_id;
 
 	if(sqlca.sqlcode != 0)
 	{
 		if(sqlca.sqlcode == 1403)
 		{
-			printf("%d 고객 데이터가 존재하지 않습니다.\n", _cust_id);
+			sprintf(buf, "%d 고객 데이터가 존재하지 않습니다.\n", hd->cust_id);
 		}
 		else
 			printf("OPEN ERR : %d\n", sqlca.sqlcode);
 		
-		return (-1);
+		return (strlen(buf));
 	}
 	else
 	{	
-		printf("%d %s %s %s %s %s %s\n",
-			c_cust_id, cust_name, cust_gender_type, login_id, login_pswd, login_name, cust_grade);	
+		sprintf(buf, "%d %s %s %s %s %s %s\n",
+			cust_id, cust_name, cust_gender_type, login_id, login_pswd, login_name, cust_grade);	
 	}
 
-	return (0);
+	return (strlen(buf));
 }
 
 
