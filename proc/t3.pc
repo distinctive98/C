@@ -1,0 +1,165 @@
+#include <stdio.h>
+
+EXEC SQL INCLUDE sqlca;
+EXEC SQL INCLUDE oraca;
+EXEC ORACLE OPTION (ORACA=YES);
+
+char	*ora_userid = "bo";
+char	*ora_passwd = "bo";
+
+char	sqlstmt[512];
+
+int
+db_connect()
+{
+	EXEC SQL CONNECT :ora_userid IDENTIFIED BY :ora_passwd;
+	if (sqlca.sqlcode != 0) {
+		fprintf(stdout, "CONNECT ERROR : %.*s\n",
+			sqlca.sqlerrm.sqlerrml, sqlca.sqlerrm.sqlerrmc);
+
+		exit(0);
+	}
+	
+	fprintf(stdout, "DATABASE와 연결이 되었습니다.\n");
+
+	return (0);
+}
+
+int
+db_disconnect()
+{
+	EXEC SQL ROLLBACK WORK RELEASE;
+	fprintf(stdout,"DATABASE와의 연결을 해제했습니다. \n");
+	exit (0);
+}
+
+int q1()
+{
+	int	cust_id;
+	char	cust_name[40+1];
+	char	cust_gender_type[1+1];
+	char	login_id[10+1];
+	char	login_pswd[40+1];
+	char	login_name[40+1];
+	char	cust_grade[1+1];
+
+	int	i=1;
+
+	EXEC SQL DECLARE C01 CURSOR FOR
+	SELECT	CUST_ID,
+		CUST_NAME,
+		CUST_GENDER_TYPE,
+		LOGIN_ID,
+		LOGIN_PSWD,
+		LOGIN_NAME,
+		CUST_GRADE
+	FROM	CUSTOMERS
+	ORDER BY CUST_ID ASC;
+
+	EXEC SQL OPEN C01;
+	if(sqlca.sqlcode != 0)
+	{
+		printf("OPEN ERR : %d\n", sqlca.sqlcode);
+		return (-1);
+	}
+
+	printf("OPEN CO1 OK!!!\n");
+
+	for(i=0; i<20; i++)
+	{
+		memset(cust_name, 0x00, sizeof(cust_name));
+		memset(cust_gender_type, 0x00, sizeof(cust_gender_type));
+		memset(login_id, 0x00, sizeof(login_id));
+		memset(login_pswd, 0x00, sizeof(login_pswd));
+		memset(login_name, 0x00, sizeof(login_name));
+		memset(cust_grade, 0x00, sizeof(cust_grade));
+	
+	
+		EXEC SQL FETCH C01
+			 INTO	:cust_id,
+				:cust_name,
+				:cust_gender_type,
+				:login_id,
+				:login_pswd,
+				:login_name,
+				:cust_grade;
+
+		if(sqlca.sqlcode != 0)
+		{
+			printf("FETCH ERR : %d\n", sqlca.sqlcode);
+			break;
+		}
+	
+		printf("%d %s %s %s %s %s %s\n",
+			cust_id, cust_name, cust_gender_type, login_id, login_pswd, login_name, cust_grade);	
+	}
+
+	EXEC SQL CLOSE C01;
+	return (0);
+}
+
+int q2()
+{
+	int	order_id;
+	int	cust_id;
+	char	order_dt[10+1];
+	char	order_channel_type[1+1];
+	char	order_status[1+1];
+	int 	order_rct_emp_id;
+
+	int i;
+
+	EXEC SQL DECLARE C02 CURSOR FOR
+	SELECT 	ORDER_ID,
+		CUST_ID,
+		TO_CHAR(ORDER_DT, 'YYYYMMDD'),
+		ORDER_CHANNEL_TYPE,
+		ORDER_STATUS,
+		NVL(ORDER_RCT_EMP_ID, -1)
+	FROM	ORDERS;
+
+	EXEC SQL OPEN C02;
+	if(sqlca.sqlcode != 0)
+	{
+		printf("OPEN ERR : %d\n", sqlca.sqlcode);
+		return(-1);
+	}
+
+	printf("OPEN C02(ORDERS) OK!!\n");
+
+	for(i=0; i<20; i++)
+	{
+		memset(order_dt, 0x00, sizeof(order_dt));
+		memset(order_channel_type, 0x00, sizeof(order_channel_type));
+		memset(order_status, 0x00, sizeof(order_status));
+
+		EXEC SQL FETCH C02
+			 INTO	:order_id,
+				:cust_id,
+				:order_dt,
+				:order_channel_type,
+				:order_status,
+				:order_rct_emp_id;
+		
+		if(sqlca.sqlcode != 0)
+		{
+			printf("FETCH ERR : %d\n", sqlca.sqlcode);
+			break;
+		}
+
+		printf("%d %d %s %s %s %d\n",
+			order_id, cust_id, order_dt, order_channel_type, order_status, order_rct_emp_id);
+
+	}
+	
+	EXEC SQL CLOSE C02;
+	return (0);
+}
+
+main(int argc, char *argv[])
+{
+db_connect();
+q1();
+q2();
+db_disconnect();
+}
