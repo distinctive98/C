@@ -1,0 +1,187 @@
+#include	"tr.h"
+
+#define CUST_MAX 20
+
+EXEC SQL INCLUDE sqlca;
+EXEC SQL INCLUDE oraca;
+EXEC ORACLE OPTION (ORACA=YES);
+
+int tr6(ibuf, obuf, emsg)
+char *ibuf;
+char *obuf;
+char *emsg;
+{
+	/* 구조체 배열 선언  */
+	cust2_t cust2;
+	cust6_t cust6[CUST_MAX];
+
+	int cust_id;
+	int order_id;
+	char order_dt[10+1];
+
+	/* JSON 변수 선언 */
+	json_t *root;
+	json_t *json;
+	json_t *jval;
+	json_t *arr;
+	json_error_t err;
+	char *str;	
+	
+	/* Err 처리 변수 선언 */
+	char err_code[40+1];
+	int emsg_len;
+	int ecode_len;
+	
+	int	i=0;
+	
+	json = json_loads(ibuf, JSON_DECODE_ANY, &err);
+
+	/* cust_id 추출 */
+	jval = json_object_get(json, "cust_id");
+	cust_id = atoi(json_string_value(jval));
+
+	/* order_id 추출 */
+	jval = json_object_get(json, "order_id");
+	order_id = atoi(json_string_value(jval));
+
+	/* order_dt 추출 */
+	memset(order_dt, 0x00, sizeof(order_dt));
+	jval = json_object_get(json, "order_dt");
+	strcpy(order_dt, json_string_value(jval));
+
+	json_decref(json);
+	
+	/* input 데이터 확인 */
+	printf("tr6 cust_id: %d\n", cust_id);
+	printf("tr6 order_id: %d\n", order_id);
+	printf("tr6 order_dt: %s\n", order_dt);
+
+	memset(&cust2, 0x00, sizeof(cust2));
+	
+	/* 첫 번째 쿼리 */
+	/* 고객 한 명 데이터 추출 */
+	EXEC SQL
+	SELECT	CUST_ID,
+			CUST_NAME,
+			LOGIN_ID,
+			CUST_GRADE
+	INTO	:cust2
+	FROM	CUSTOMERS
+	WHERE	CUST_ID = :cust_id;
+
+	/* JSON root 오픈 */
+	root = json_object();
+	
+	/* 에러 처리  */
+	if(sqlca.sqlcode != 0)
+	{
+		if(sqlca.sqlcode == 1403)
+		{
+			/* SQL 쿼리가 두개 수행되므로 각각의 에러 메세지를 '+' 기호로 구분 */
+			emsg_len = sprintf(emsg, "%d 고객 데이터가 존재하지 않습니다.+", cust_id);
+		}
+		else
+		{
+			emsg_len = sprintf(emsg, "서버 에러가 발생하였습니다.+");
+		}
+	}
+
+	/* 정상일 때  */
+	else
+	{
+		emsg_len = sprintf(emsg, "%d번 고객정보 조회에 성공하였습니다.+", cust_id);
+
+		json_object_set(root, "cust_id", json_integer(cust2.cust_id));
+		json_object_set(root, "cust_name", json_string(cust2.cust_name));
+		json_object_set(root, "login_id", json_string(cust2.login_id));
+		json_object_set(root, "cust_grade", json_string(cust2.cust_grade));
+	}
+
+	/* 첫 번째 쿼리에 대한 에러코드 저장 */
+	ecode_len = sprintf(err_code, "%d+", sqlca.sqlcode);
+
+	
+	/* 두 번째 쿼리  */
+	/* 한 고객에 대한 특정 날짜에 해당하는 주문 내역 추출 */
+	EXEC SQL DECLARE C06 CURSOR FOR
+	SELECT		ORDER_ID,
+				TO_CHAR(ORDER_DT, 'YYYY-MM-DD') ORDER_DT,
+				ORDER_CHANNEL_TYPE,
+				ORDER_STATUS
+	FROM		ORDERS
+	WHERE		CUST_ID = :cust_id
+	AND			TRUNC(ORDER_DT) = TO_DATE(:order_dt, 'YYYY-MM-DD')
+	AND			ORDER_ID > :order_id
+	ORDER BY	ORDER_ID;
+	
+	/* 커서 오픈 */
+	EXEC SQL OPEN C06;
+
+	/* JSON arr 오픈 */
+	arr = json_array();	
+	json = json_object();
+
+	/* 구조체 메모리 초기화 */
+	memset(cust6, 0x00, sizeof(cust6));
+
+	/* 구조체에 FETCH  */
+	EXEC SQL FETCH C06
+		INTO 	:cust6;
+
+	printf("sqlerr : %d\n", sqlca.sqlerrd[2]);
+	printf("sqlcode : %d\n", sqlca.sqlcode);
+
+	/* 에러 처리 */
+	if(sqlca.sqlcode != 0 && sqlca.sqlcode != 1403)
+	{
+		/* 기존 emsg에 추가하기 위해서 len을 더함 */
+		sprintf(emsg + emsg_len, "서버 에러가 발생하였습니다.");
+	}
+	else
+	{	
+		for(i=0; i<sqlca.sqlerrd[2]; i++)
+		{
+			json = json_object();
+			json_object_set(json, "order_id", json_integer(cust6[i].order_id));
+			json_object_set(json, "order_dt", json_string(cust6[i].order_dt));
+			json_object_set(json, "order_channel_type", json_string(cust6[i].order_channel_type));
+			json_object_set(json, "order_status", json_string(cust6[i].order_status));
+			
+			json_array_append(arr, json);
+		}
+
+		json_object_set(root, "arr", arr);
+		sprintf(emsg + emsg_len, "%d건 검색되었습니다.", sqlca.sqlerrd[2]);
+	}
+	
+	/* 두 번째 쿼리에 대한 에러 코드 저장 */	
+	sprintf(err_code + ecode_len, "%d", sqlca.sqlcode);
+
+	/* JSON에 에러 정보 저장 */
+	json_object_set(root, "err_code", json_string(err_code));
+	json_object_set(root, "err_msg", json_string(emsg));
+
+	str = json_dumps(root, JSON_ENCODE_ANY);
+	strcpy(obuf, str);	
+
+	/* 해제 */
+	free(str);
+	json_decref(root);
+
+	EXEC SQL CLOSE C06;
+	return (strlen(obuf));
+}
+
+#if(0)
+int main(void)
+{
+	char	*ibuf = "00001";
+	char	obuf[100000];
+	char	emsg[1000];
+
+	db_connect();
+	tr2(ibuf, obuf, emsg);
+	printf("obuf : %s", obuf);
+	db_disconnect();
+}
+#endif

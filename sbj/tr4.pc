@@ -1,0 +1,126 @@
+#include "tr.h"
+
+EXEC SQL INCLUDE sqlca;
+EXEC SQL INCLUDE oraca;
+EXEC ORACLE OPTION (ORACA=YES);
+
+int tr4(ibuf, obuf, emsg)
+char *ibuf;
+char *obuf;
+char *emsg;
+{
+	/* 구조체 변수  */
+	cust_t cust;
+	
+	/* 트랜잭션 구분 변수 */
+	char type[6+1];
+
+	/* JSON 변수 */
+	json_t *root;
+	json_t *json;
+	json_t *jval;
+	json_error_t err;
+	char *str;
+
+	/* TYPE 추출(INSERT, UPDATE, DELETE) */
+	json = json_loads(ibuf, JSON_DECODE_ANY, &err);
+	jval = json_object_get(json, "type");
+	memset(type, 0x00, sizeof(type));
+	strcpy(type, json_string_value(jval));
+	printf("%s\n", type);	
+
+	/* Json 오픈  */
+	root = json_object();	
+	
+	/* cust_id 추출 */
+	memset(&cust, 0x00, sizeof(cust));
+	jval = json_object_get(json, "cust_id");
+	cust.cust_id = atoi(json_string_value(jval));
+
+	/* insert & update */
+	if(strcmp(type, "insert") == 0 || strcmp(type, "update") == 0)
+	{
+		printf("cur : insert or update\n");		
+
+		/* 나머지 cust 정보 추출 */
+		jval = json_object_get(json, "cust_name");
+		strcpy(cust.cust_name, json_string_value(jval));
+		jval = json_object_get(json, "cust_gender_type");
+		strcpy(cust.cust_gender_type, json_string_value(jval));
+		jval = json_object_get(json, "login_id");
+		strcpy(cust.login_id, json_string_value(jval));
+		jval = json_object_get(json, "login_pswd");
+		strcpy(cust.login_pswd, json_string_value(jval));
+		jval = json_object_get(json, "login_name");
+		strcpy(cust.login_name, json_string_value(jval));
+		jval = json_object_get(json, "cust_grade");
+		strcpy(cust.cust_grade, json_string_value(jval));
+	
+		/* insert  */	
+		if(strcmp(type, "insert") == 0)
+		{
+			printf("cur : insert\n");
+
+			EXEC SQL
+			INSERT INTO CUSTOMERS
+			VALUES(:cust);
+		}
+		
+		/* update */
+		else
+		{
+			printf("cur : update\n");			
+
+			EXEC SQL
+			UPDATE	CUSTOMERS
+			SET		CUST_NAME 			= : cust.cust_name,
+					CUST_GENDER_TYPE	= : cust.cust_gender_type,
+					LOGIN_ID			= : cust.login_id,
+					LOGIN_PSWD			= : cust.login_pswd,
+					LOGIN_NAME			= : cust.login_name,
+					CUST_GRADE			= : cust.cust_grade			
+			WHERE	CUST_ID = :cust.cust_id;
+		}
+	}
+
+	/* delete  */
+	else
+	{
+		printf("cur : delete\n");
+		
+		EXEC SQL
+		DELETE FROM CUSTOMERS
+		WHERE CUST_ID = :cust.cust_id;
+	}
+
+	/* CRUD 실패시 */	
+	if(sqlca.sqlcode != 0)
+	{
+		printf("error!\n");
+		sprintf(emsg, "서버 에러가 발생하였습니다.");
+		EXEC SQL ROLLBACK WORK;
+	}
+	
+	/* CRUD 성공시 */
+	else
+	{
+		printf("success %s", type);
+		sprintf(emsg, "%d번 고객정보 %s에 성공하였습니다.", cust.cust_id, type);
+		EXEC SQL COMMIT WORK;
+	}
+
+	/* JSON에 에러 데이터 저장 */
+	json_object_set(json, "err_code", json_integer(sqlca.sqlcode));
+	json_object_set(json, "err_msg", json_string(emsg));	
+
+	/* obuf에 JSON 문자열 저장 */
+	str = json_dumps(json, JSON_ENCODE_ANY);
+	strcpy(obuf, str);	
+
+	/* 메모리 해제 */
+	free(str);
+	json_decref(root);
+	json_decref(json);	
+
+	return (strlen(obuf));
+}

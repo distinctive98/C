@@ -1,0 +1,102 @@
+#include "tr.h"
+
+EXEC SQL INCLUDE sqlca;
+EXEC SQL INCLUDE oraca;
+EXEC ORACLE OPTION (ORACA=YES);
+
+int tr1(ibuf, obuf, emsg)
+char *ibuf;
+char *obuf;
+char *emsg;
+{
+	/* 구조체 변수 */
+	cust_t cust;
+	int cust_id;
+	
+	/* json 변수 */
+	json_t *json;
+	json_t *jval;
+	json_error_t err;
+	char *str;
+
+	/* cust_id 추출 */
+	json = json_loads(ibuf, JSON_DECODE_ANY, &err);
+	jval = json_object_get(json, "cust_id");
+	cust_id = atoi(json_string_value(jval));
+
+	json_decref(json);
+	
+	printf("tr1 cust_id: %d\n", cust_id);	
+	
+	/* 메모리 초기화 */
+	memset(&cust, 0x00, sizeof(cust));
+	
+	/* cust_id에 해당하는 하나의row 추출 */
+	EXEC SQL
+	SELECT	CUST_ID,
+			CUST_NAME,
+			CUST_GENDER_TYPE,
+			LOGIN_ID,
+			LOGIN_PSWD,
+			LOGIN_NAME,
+			CUST_GRADE
+	INTO	:cust
+	FROM	CUSTOMERS
+	WHERE	CUST_ID = :cust_id;
+
+	/* json 시작 */
+	json = json_object();
+
+	/* 에러 확인 */
+	if(sqlca.sqlcode != 0)
+	{	
+		if(sqlca.sqlcode == 1403)
+		{
+			sprintf(emsg, "%d 고객 데이터가 존재하지 않습니다.", cust_id);
+		}
+		else
+		{
+			sprintf(emsg, "서버 에러가 발생하였습니다.");
+		}
+	}
+	else
+	{
+		sprintf(emsg, "%d번 고객정보 조회에 성공하였습니다.", cust_id);
+
+		json_object_set(json, "cust_id", json_integer(cust.cust_id));
+		json_object_set(json, "cust_name", json_string(cust.cust_name));
+		json_object_set(json, "cust_gender_type", json_string(cust.cust_gender_type));
+		json_object_set(json, "login_id", json_string(cust.login_id));
+		json_object_set(json, "login_pswd", json_string(cust.login_pswd));
+		json_object_set(json, "login_name", json_string(cust.login_name));
+		json_object_set(json, "cust_grade", json_string(cust.cust_grade));		
+	}
+	
+	/* JSON에 에러 데이터 저장 */
+	json_object_set(json, "err_code", json_integer(sqlca.sqlcode));
+	json_object_set(json, "err_msg", json_string(emsg));
+	
+	/* obuf에 JSON 문자열 저장 */
+	str = json_dumps(json, JSON_ENCODE_ANY);
+	strcpy(obuf, str);
+
+	/* 메모리 해제 */
+	free(str);
+	json_decref(json);
+
+	return (strlen(obuf));
+}
+
+#if(0)
+int main(void)
+{
+	char *ibuf = "00001";
+	char obuf[100000];
+	char emsg[1000];
+	
+	db_connect();
+	tr1(ibuf, obuf, emsg);
+	printf("obuf : %s", obuf);
+	db_disconnect();
+}
+#endif

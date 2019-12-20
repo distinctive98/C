@@ -1,0 +1,114 @@
+#include	"tr.h"
+
+#define CUST_MAX 20
+
+EXEC SQL INCLUDE sqlca;
+EXEC SQL INCLUDE oraca;
+EXEC ORACLE OPTION (ORACA=YES);
+
+int tr2(ibuf, obuf, emsg)
+char *ibuf;
+char *obuf;
+char *emsg;
+{
+	/* 구조체 배열 선언  */
+	cust2_t cust2[CUST_MAX];
+	int cust_id;
+
+	/* JSON 변수 */
+	json_t *root;
+	json_t *json;
+	json_t *jval;
+	json_t *arr;
+	json_error_t err;
+	char *str;	
+
+	int	i=0;
+
+	/* cust_id 추출 */	
+	json = json_loads(ibuf, JSON_DECODE_ANY, &err);
+	jval = json_object_get(json, "cust_id");
+	cust_id = atoi(json_string_value(jval));
+	json_decref(json);
+
+	printf("tr2 cust_id: %d\n", cust_id);
+
+	/* cust_id부터 +20에 해당하는 행 CUSTOMERS 테이블에서 추출 */
+	EXEC SQL DECLARE C02 CURSOR FOR
+
+	SELECT		CUST_ID,
+				CUST_NAME,
+				LOGIN_ID,
+				CUST_GRADE
+	FROM		CUSTOMERS
+	WHERE		CUST_ID >= :cust_id
+	ORDER BY	CUST_ID;	
+	
+	/* 커서 오픈 */
+	EXEC SQL OPEN C02;
+	
+	/* JSON 할당 */	
+	root = json_object();
+	arr = json_array();	
+
+	/* 구조체 메모리 초기화(FETCH 전에 필수로 해야 함) */
+	memset(cust2, 0x00, sizeof(cust2));
+
+	/* 구조체에 FETCH  */
+	EXEC SQL FETCH C02
+		INTO 	:cust2;
+	
+	/* 에러 처리 */
+	if(sqlca.sqlcode != 0 && sqlca.sqlcode != 1403)
+	{
+		sprintf(emsg, "서버 에러가 발생하였습니다.");
+	}
+
+	/* 성공할 경우 */
+	else
+	{
+		/* sqlca.sqlerrd[2]에는 FETCH건수가 저장되어 있음  */
+		for(i=0; i<sqlca.sqlerrd[2]; i++)
+		{
+			json = json_object();
+			json_object_set(json, "cust_id", json_integer(cust2[i].cust_id));
+			json_object_set(json, "cust_name", json_string(cust2[i].cust_name));
+			json_object_set(json, "login_id", json_string(cust2[i].login_id));
+			json_object_set(json, "cust_grade", json_string(cust2[i].cust_grade));
+			
+			json_array_append(arr, json);
+		}
+
+		json_object_set(root, "arr", arr);
+		sprintf(emsg, "%d건이 검색되었습니다.", sqlca.sqlerrd[2]);
+	}
+
+	/* 에러 데이터 저장 */
+	json_object_set(root, "err_code", json_integer(sqlca.sqlcode));
+	json_object_set(root, "err_msg", json_string(emsg));	
+
+	/* obuf에JSON 데이터 저장 */
+	str = json_dumps(root, JSON_ENCODE_ANY);
+	strcpy(obuf, str);	
+
+	/* 메모리 해제 */
+	free(str);
+	json_decref(root);
+	
+	EXEC SQL CLOSE C02;
+	return (strlen(obuf));
+}
+
+#if(0)
+int main(void)
+{
+	char	*ibuf = "00001";
+	char	obuf[100000];
+	char	emsg[1000];
+
+	db_connect();
+	tr2(ibuf, obuf, emsg);
+	printf("obuf : %s", obuf);
+	db_disconnect();
+}
+#endif
